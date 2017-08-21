@@ -22,7 +22,7 @@ cpp!({
 use std::os::raw::c_void;
 use std::ffi::CString;
 use fst::Automaton;
-use helpers::{WeightedNFA, AutomatonDFAAdapter, BeamSearchAdapter, compare_weights};
+use helpers::{WeightedNFA, AutomatonDFAAdapter, BeamSearchAdapter, EpsilonExpandingBeamSearchAdapter, compare_weights, FollowEpsilonNFA};
 use std::iter;
 use std::slice;
 
@@ -52,7 +52,7 @@ impl TransducerBox {
         Some(TransducerBox { transducer: transducer })
     }
 
-    pub fn text_to_denoised_fsa(&self, query: &str, n_best: u64) -> Option<HfstBasicTransducerBox> {
+    pub fn text_to_denoised_fsa(&self, query: &str) -> Option<HfstBasicTransducerBox> {
         // XXX: This might be ridiculous.
         // We go Rust string -> C string -> STL string and copy each time
         let query_cp = CString::new(query).unwrap();
@@ -60,7 +60,7 @@ impl TransducerBox {
         let err_model = self.transducer;
         let graph;
         unsafe {
-            graph = cpp!([query_raw as "char*", n_best as "uint64_t", err_model as "HfstTransducer*"] -> *mut c_void as "HfstBasicTransducer*" {
+            graph = cpp!([query_raw as "char*", err_model as "HfstTransducer*"] -> *mut c_void as "HfstBasicTransducer*" {
                 try {
                     // 1. Create automaton for query
                     printf("1. Create automaton for query\n");
@@ -84,9 +84,9 @@ impl TransducerBox {
                     // query_fsa.n_best(n_best);
 
                     // 5. (determinize?)
-                    //printf("5. (determinize?)\n");
-                    //fflush(stdout);
-                    //query_fsa.determinize();
+                    /*printf("5. (determinize?)\n");
+                    fflush(stdout);
+                    query_fsa.determinize();*/
                     // 6. Convert to HfstBasicTransducer
                     printf("6. Convert to HfstBasicTransducer\n");
                     fflush(stdout);
@@ -145,6 +145,56 @@ impl HfstBasicTransducerBox {
             result
         }
     }
+
+    fn step(&self, stateno: u64, inp: Vec<u8>) -> (Vec<NextStates>, Vec<u8>) {
+        let graph = self.graph;
+        let input_cstr = CString::new(inp).unwrap();
+        let input_ptr = input_cstr.into_raw();
+        let next_states;
+        let inp2;
+        unsafe {
+            let vecinfo = cpp!(
+                    [graph as "HfstBasicTransducer*",
+                     stateno as "uint64_t",
+                     input_ptr as "char*"] ->
+                        VectorInfo<NextStates> as "struct VectorInfo" {
+
+                std::vector<struct NextStates> next_states_out;
+
+                HfstBasicTransitions next_states = (*graph)[stateno];
+
+                for (HfstBasicTransitions::const_iterator it = next_states.begin();
+                     it != next_states.end();
+                     it++) {
+                    if (it->get_input_symbol() == input_ptr) {
+                        next_states_out.push_back((struct NextStates) {
+                            it->get_target_state(),
+                            it->get_weight()
+                        });
+                    }
+                }
+
+                return ((struct VectorInfo) {
+                    (unsigned int)next_states_out.size(),
+                    next_states_out.empty() ?
+                        NULL : &next_states_out[0]
+                });
+            });
+            // move back
+            inp2 = CString::from_raw(input_ptr).into_bytes();
+            let next_states_slice = slice::from_raw_parts(
+                vecinfo.ptr, vecinfo.size as usize
+            );
+            // convert results to vector, which involves copying...
+            next_states = next_states_slice.to_vec();
+        }
+        (next_states, inp2)
+    }
+
+    fn get_next_state_iter(&self, next_states: Vec<NextStates>) -> <Self as WeightedNFA>::NextStateIter {
+        Box::new(next_states.into_iter().map(|next_state|
+            ((next_state.state as u64, vec![]), next_state.weight as f64)))
+    }
 }
 
 impl Drop for HfstBasicTransducerBox {
@@ -182,6 +232,18 @@ cpp!({
     };
 });
 
+impl FollowEpsilonNFA for HfstBasicTransducerBox {
+    fn follow_epsilon(&self, state: &Self::State) -> Self::NextStateIter {
+        let &(stateno, ref buf) = state;
+        if buf.len() != 0 {
+            return Box::new(iter::empty());
+        }
+        let epsilon = "@_EPSILON_SYMBOL_@".as_bytes().to_vec();
+        let (next_states, _buf) = self.step(stateno, epsilon);
+        self.get_next_state_iter(next_states)
+    }
+}
+
 impl WeightedNFA for HfstBasicTransducerBox {
     type State = (u64, Vec<u8>);
     type NextStateIter = Box<Iterator<Item=(Self::State, f64)>>;
@@ -205,52 +267,10 @@ impl WeightedNFA for HfstBasicTransducerBox {
     }
 
     fn accept(&self, state: &Self::State, byte: u8) -> Self::NextStateIter {
-        let graph = self.graph;
         let &(stateno, ref buf) = state;
         let mut new_buf = buf.to_owned();
         new_buf.push(byte);
-        let input_cstr = CString::new(new_buf).unwrap();
-        let input_ptr = input_cstr.into_raw();
-        let next_states;
-        unsafe {
-            let vecinfo = cpp!(
-                    [graph as "HfstBasicTransducer*",
-                     stateno as "uint64_t",
-                     input_ptr as "char*"] ->
-                        VectorInfo<NextStates> as "struct VectorInfo" {
-
-                std::vector<struct NextStates> next_states_out;
-
-                HfstBasicTransitions next_states = (*graph)[stateno];
-
-                for (HfstBasicTransitions::const_iterator it = next_states.begin();
-                     it != next_states.end();
-                     it++) {
-                    if (it->get_input_symbol().size() > 2)
-                    //if (it->get_input_symbol().size() != 1)
-                        printf("Input %i '%s'\n", it->get_input_symbol().size() && it->get_input_symbol().c_str());
-                    if (it->get_input_symbol() == input_ptr) {
-                        next_states_out.push_back((struct NextStates) {
-                            it->get_target_state(),
-                            it->get_weight()
-                        });
-                    }
-                }
-
-                return ((struct VectorInfo) {
-                    next_states_out.size(),
-                    next_states_out.empty() ?
-                        NULL : &next_states_out[0]
-                });
-            });
-            // move back
-            new_buf = CString::from_raw(input_ptr).into_bytes();
-            let next_states_slice = slice::from_raw_parts(
-                vecinfo.ptr, vecinfo.size as usize
-            );
-            // convert results to vector, which involves copying...
-            next_states = next_states_slice.to_vec();
-        }
+        let (next_states, new_buf) = self.step(stateno, new_buf);
         if next_states.len() == 0 {
             if new_buf.len() >= 4 {
                 // XXX: No support for multichars, assume 4 bytes max since that's the max length
@@ -262,22 +282,21 @@ impl WeightedNFA for HfstBasicTransducerBox {
                 Box::new(iter::once(((stateno, new_buf), 0.0)))
             }
         } else {
-            Box::new(next_states.into_iter().map(|next_state|
-                ((next_state.state as u64, vec![]), next_state.weight as f64)))
+            self.get_next_state_iter(next_states)
         }
     }
 }
 
 pub type AutStack = AutomatonDFAAdapter<
-    BeamSearchAdapter<HfstBasicTransducerBox>>;
+    EpsilonExpandingBeamSearchAdapter<HfstBasicTransducerBox>>;
 
 pub fn mk_stack(aut: HfstBasicTransducerBox, threshold: f64, beam_size: usize) ->
         AutStack {
-    AutomatonDFAAdapter(BeamSearchAdapter {
+    AutomatonDFAAdapter(EpsilonExpandingBeamSearchAdapter(BeamSearchAdapter {
         aut: aut,
         threshold: threshold,
         beam_size: beam_size
-    })
+    }))
 }
 
 pub fn get_weights(aut: &AutStack, result: &[u8]) -> f64 {
@@ -286,7 +305,7 @@ pub fn get_weights(aut: &AutStack, result: &[u8]) -> f64 {
         state = aut.accept(&state, *inp);
     }
     let weights = state.iter().filter_map(|&(ref state, ref weight)|
-        if aut.0.aut.is_match(state) {
+        if (aut.0).0.aut.is_match(state) {
             Some(*weight)
         } else {
             None

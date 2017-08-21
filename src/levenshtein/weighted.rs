@@ -1,4 +1,4 @@
-use helpers::{WeightedNFA, DFA, BeamSearchAdapter, DFAUtf8Adapter,
+use helpers::{WeightedNFA, BeamSearchAdapter, DFAUtf8Adapter,
               AutomatonDFAAdapter, compare_weights};
 
 use std::sync::Arc;
