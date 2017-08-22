@@ -52,7 +52,9 @@ impl TransducerBox {
         Some(TransducerBox { transducer: transducer })
     }
 
-    pub fn text_to_denoised_fsa(&self, query: &str) -> Option<HfstBasicTransducerBox> {
+    pub fn text_to_denoised_fsa(&self, query: &str, determinize: bool,
+                                trace: bool)
+            -> Option<HfstBasicTransducerBox> {
         // XXX: This might be ridiculous.
         // We go Rust string -> C string -> STL string and copy each time
         let query_cp = CString::new(query).unwrap();
@@ -60,22 +62,32 @@ impl TransducerBox {
         let err_model = self.transducer;
         let graph;
         unsafe {
-            graph = cpp!([query_raw as "char*", err_model as "HfstTransducer*"] -> *mut c_void as "HfstBasicTransducer*" {
+            graph = cpp!([
+                    query_raw as "char*",
+                    err_model as "HfstTransducer*",
+                    determinize as "bool",
+                    trace as "bool"] -> *mut c_void as "HfstBasicTransducer*" {
                 try {
                     // 1. Create automaton for query
-                    printf("1. Create automaton for query\n");
-                    fflush(stdout);
+                    if (trace) {
+                        fprintf(stderr, "1. Create automaton for query\n");
+                        fflush(stderr);
+                    }
                     std::string query_str(query_raw);
                     HfstTokenizer tok;
                     HfstTransducer query_fsa(query_str, tok, TROPICAL_OPENFST_TYPE);
                     ImplementationType t = err_model->get_type();
                     // 2. Compose with error model
-                    printf("2. Compose with error model\n");
-                    fflush(stdout);
+                    if (trace) {
+                        fprintf(stderr, "2. Compose with error model\n");
+                        fflush(stderr);
+                    }
                     query_fsa.compose(*err_model);
                     // 3. Project output side
-                    printf("3. Project output side\n");
-                    fflush(stdout);
+                    if (trace) {
+                        fprintf(stderr, "3. Project output side\n");
+                        fflush(stderr);
+                    }
                     query_fsa.output_project();
                     // 4. Use n best to remove low weight outputs (could use weighted version instead...)
                     //printf("4. Use n best to remove low weight outputs (could use weighted version instead...)\n");
@@ -83,18 +95,24 @@ impl TransducerBox {
 
                     // query_fsa.n_best(n_best);
 
-                    // 5. (determinize?)
-                    /*printf("5. (determinize?)\n");
-                    fflush(stdout);
-                    query_fsa.determinize();*/
+                    if (determinize) {
+                        // 5. (determinize?)
+                        if (trace) {
+                            fprintf(stderr, "5. (determinize?)\n");
+                            fflush(stderr);
+                        }
+                        query_fsa.determinize();
+                    }
                     // 6. Convert to HfstBasicTransducer
-                    printf("6. Convert to HfstBasicTransducer\n");
-                    fflush(stdout);
+                    if (trace) {
+                        fprintf(stderr, "6. Convert to HfstBasicTransducer\n");
+                        fflush(stderr);
+                    }
                     HfstBasicTransducer *hbt = new HfstBasicTransducer(query_fsa);
                     return hbt;
                 } catch (HfstException e) {
-                    printf("Exception: %s\n", e().c_str());
-                    fflush(stdout);
+                    fprintf(stderr, "Exception: %s\n", e().c_str());
+                    fflush(stderr);
 
                     return NULL;
                 }
