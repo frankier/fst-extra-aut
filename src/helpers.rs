@@ -4,7 +4,6 @@ use std::str::from_utf8;
 use std::collections::{BinaryHeap, HashSet};
 use std::iter::Iterator;
 use std::f64;
-use std::fmt::Debug;
 
 use fst::automaton::Automaton;
 
@@ -114,7 +113,7 @@ impl<S, IterT: Iterator<Item=(S, f64)>> Eq for AgendaItem<IterT> {}
 type Agenda<NFA: WeightedNFA> = BinaryHeap<AgendaItem<NFA::NextStateIter>>;
 //type ExtraExpand<NFA: WeightedNFA, S> = Fn(&mut Agenda<NFA>, S, f64) -> ();
 
-impl<NFA: WeightedNFA> BeamSearchAdapter<NFA> where NFA::State: Eq + Hash + Clone + Debug {
+impl<NFA: WeightedNFA> BeamSearchAdapter<NFA> where NFA::State: Eq + Hash + Clone {
     fn step<ExtraExpand>(&self, state: &<Self as DFA>::State, inp: NFA::InputType,
             extra_expand: ExtraExpand) -> <Self as DFA>::State
                 where ExtraExpand: Fn(&mut Agenda<NFA>, &NFA::State, f64) -> () {
@@ -170,7 +169,7 @@ impl<NFA: WeightedNFA> BeamSearchAdapter<NFA> where NFA::State: Eq + Hash + Clon
     }
 }
 
-impl<NFA: WeightedNFA> DFA for BeamSearchAdapter<NFA> where NFA::State: Eq + Hash + Clone + Debug {
+impl<NFA: WeightedNFA> DFA for BeamSearchAdapter<NFA> where NFA::State: Eq + Hash + Clone {
     type State = Vec<(NFA::State, f64)>;
     type InputType = NFA::InputType;
 
@@ -197,11 +196,11 @@ impl<NFA: WeightedNFA> DFA for BeamSearchAdapter<NFA> where NFA::State: Eq + Has
 
 pub struct EpsilonExpandingBeamSearchAdapter
     <Wrapped: WeightedNFA + FollowEpsilonNFA>(pub BeamSearchAdapter<Wrapped>)
-    where Wrapped::State: Eq + Hash + Clone + Debug;
+    where Wrapped::State: Eq + Hash + Clone;
 
 
 impl<Wrapped: WeightedNFA + FollowEpsilonNFA> EpsilonExpandingBeamSearchAdapter<Wrapped>
-        where Wrapped::State: Eq + Hash + Clone + Debug {
+        where Wrapped::State: Eq + Hash + Clone {
     fn expand_epsilon(&self, heap: &mut Agenda<Wrapped>,
                       next_state: &Wrapped::State, next_weight: f64) {
         heap.push(AgendaItem::new(
@@ -211,7 +210,7 @@ impl<Wrapped: WeightedNFA + FollowEpsilonNFA> EpsilonExpandingBeamSearchAdapter<
     }
 }
 
-impl<Wrapped: WeightedNFA + FollowEpsilonNFA> DFA for EpsilonExpandingBeamSearchAdapter<Wrapped> where Wrapped::State: Eq + Hash + Clone + Debug {
+impl<Wrapped: WeightedNFA + FollowEpsilonNFA> DFA for EpsilonExpandingBeamSearchAdapter<Wrapped> where Wrapped::State: Eq + Hash + Clone {
     type State = <BeamSearchAdapter<Wrapped> as DFA>::State;
     type InputType = <BeamSearchAdapter<Wrapped> as DFA>::InputType;
 
