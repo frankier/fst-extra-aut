@@ -3,4 +3,4 @@ extern crate fst;
 
 pub mod levenshtein;
 pub mod hfst;
-pub mod helpers;
+pub mod adapters;

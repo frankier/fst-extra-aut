@@ -1,5 +1,5 @@
-use helpers::{WeightedNFA, BeamSearchAdapter, DFAUtf8Adapter,
-              AutomatonDFAAdapter, compare_weights};
+use adapters::{WeightedNFA, BeamSearchAdapter, DFAUtf8Adapter,
+               AutomatonDFAAdapter, compare_weights};
 
 use std::sync::Arc;
 use fst::Automaton;

@@ -22,7 +22,7 @@ cpp!({
 use std::os::raw::c_void;
 use std::ffi::CString;
 use fst::Automaton;
-use helpers::{WeightedNFA, AutomatonDFAAdapter, BeamSearchAdapter, EpsilonExpandingBeamSearchAdapter, compare_weights, FollowEpsilonNFA};
+use adapters::{WeightedNFA, AutomatonDFAAdapter, BeamSearchAdapter, EpsilonExpandingBeamSearchAdapter, compare_weights, FollowEpsilonNFA};
 use std::iter;
 use std::slice;
 
