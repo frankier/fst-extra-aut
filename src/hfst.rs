@@ -22,7 +22,7 @@ cpp!({
 use std::os::raw::c_void;
 use std::ffi::CString;
 use fst::Automaton;
-use adapters::{WeightedNFA, AutomatonDFAAdapter, BeamSearchAdapter, EpsilonExpandingBeamSearchAdapter, compare_weights, FollowEpsilonNFA};
+use adapters::{WeightedNFA, AutomatonDFAAdapter, BeamSearchAdapter, EpsilonExpandingBeamSearchAdapter, compare_weights, FollowEpsilonNFA, WeightedStateAutomaton};
 use std::iter;
 use std::slice;
 
@@ -315,6 +315,19 @@ pub fn mk_stack(aut: HfstBasicTransducerBox, threshold: f64, beam_size: usize) -
         threshold: threshold,
         beam_size: beam_size
     }))
+}
+
+impl WeightedStateAutomaton for AutStack {
+    fn get_weight(&self, state: &Self::State) -> f64 {
+        let weights = state.iter().filter_map(|&(ref state, ref weight)|
+            if (self.0).0.aut.is_match(state) {
+                Some(*weight)
+            } else {
+                None
+            }
+        );
+        weights.min_by(compare_weights).unwrap()
+    }
 }
 
 pub fn get_weights(aut: &AutStack, result: &[u8]) -> f64 {

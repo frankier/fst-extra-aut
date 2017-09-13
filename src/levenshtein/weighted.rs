@@ -1,5 +1,5 @@
 use adapters::{WeightedNFA, BeamSearchAdapter, DFAUtf8Adapter,
-               AutomatonDFAAdapter, compare_weights};
+               AutomatonDFAAdapter, compare_weights, WeightedStateAutomaton};
 
 use std::sync::Arc;
 use fst::Automaton;
@@ -137,6 +137,19 @@ pub fn mk_levenshtein(query: &str, threshold: f64, beam_size: usize) -> Levensht
         threshold: threshold,
         beam_size: beam_size
     }))
+}
+
+impl WeightedStateAutomaton for LevenshteinStack {
+    fn get_weight(&self, state: &Self::State) -> f64 {
+        let weights = state.0.iter().filter_map(|&(state, weight)|
+            if (self.0).0.aut.is_match(&state) {
+                Some(weight)
+            } else {
+                None
+            }
+        );
+        weights.min_by(compare_weights).unwrap()
+    }
 }
 
 pub fn get_levenshtein_weights(aut: &LevenshteinStack, result: &[u8]) -> f64 {

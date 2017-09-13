@@ -252,7 +252,8 @@ impl<Wrapped: WeightedNFA + FollowEpsilonNFA> DFA for EpsilonExpandingBeamSearch
 
 pub struct DFAUtf8Adapter<Wrapped: DFA<InputType=char>>(pub Wrapped);
 
-impl<Wrapped: DFA<InputType=char>> DFA for DFAUtf8Adapter<Wrapped> where Wrapped::State: Clone {
+impl<Wrapped: DFA<InputType=char>> DFA for DFAUtf8Adapter<Wrapped>
+        where Wrapped::State: Clone {
     type State = (Wrapped::State, Vec<u8>);
     type InputType = u8;
 
@@ -291,7 +292,8 @@ impl<Wrapped: DFA<InputType=char>> DFA for DFAUtf8Adapter<Wrapped> where Wrapped
 
 pub struct AutomatonDFAAdapter<Wrapped: DFA<InputType=u8>>(pub Wrapped);
 
-impl<Wrapped: DFA<InputType=u8>> Automaton for AutomatonDFAAdapter<Wrapped> {
+impl<Wrapped: DFA<InputType=u8>> Automaton for AutomatonDFAAdapter<Wrapped> 
+        where Wrapped::State: Clone {
     type State = Wrapped::State;
 
     fn start(&self) -> Self::State {
@@ -313,4 +315,8 @@ impl<Wrapped: DFA<InputType=u8>> Automaton for AutomatonDFAAdapter<Wrapped> {
     fn accept(&self, state: &Self::State, inp: u8) -> Self::State {
         self.0.accept(state, inp)
     }
+}
+
+pub trait WeightedStateAutomaton: Automaton {
+    fn get_weight(&self, state: &Self::State) -> f64;
 }
