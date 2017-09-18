@@ -43,7 +43,7 @@ impl<'f, 'a, A: Automaton> Streamer<'a> for SimpleStateStream<'f, A>
         while let Some(state) = self.stack.pop() {
             if state.trans >= state.node.len()
                     || !self.aut.can_match(&state.aut_state) {
-                if state.node.addr() != self.fst.root_addr {
+                if state.node.addr() != self.fst.root().addr() {
                     self.inp.pop().unwrap();
                 }
                 continue;

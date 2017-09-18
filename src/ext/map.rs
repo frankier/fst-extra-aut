@@ -12,7 +12,7 @@ pub trait MapExt {
 
 impl MapExt for Map {
     fn search_state_stream<A: Automaton>(&self, aut: A) -> SimpleStateStream<A> {
-        SimpleStateStream(self.0.search_state_stream(aut))
+        SimpleStateStream(self.as_fst().search_state_stream(aut))
     }
 }
 

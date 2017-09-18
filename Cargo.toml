@@ -16,7 +16,7 @@ build = "build.rs"
 
 [dependencies]
 cpp = "0.3.0"
-fst = { git = "https://github.com/frankier/fst.git", branch = "make-ext-search-possible" }
+fst = "0.2.3"
 
 [build-dependencies]
 cpp_build = "0.3.0"
